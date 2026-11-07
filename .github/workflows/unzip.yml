@@ -2,6 +2,9 @@ name: Unzip and Split Sprites
 
 on: [push]
 
+permissions:
+  contents: write
+
 jobs:
   unzip-and-split:
     runs-on: ubuntu-latest
@@ -24,29 +27,30 @@ jobs:
 
           # 3. Split the files into batches of 500
           mkdir -p split_sprites
-          cd temp_all_sprites
           
-          # Find all files, shuffle them (optional, but helps if zips had alphabetical order), 
-          # and loop through them 500 at a time.
-          find . -type f | split -l 500 - batch_
+          # Find ALL files (even inside subfolders), sort them, and split into text lists of 500 paths each
+          find temp_all_sprites -type f | sort | split -l 500 - batch_
           
           # 4. Move each batch into its own numbered folder
           i=1
           for batch in batch_*; do
-            FOLDER_NAME="../split_sprites/sprites_batch_$i"
+            FOLDER_NAME="split_sprites/sprites_batch_$i"
             mkdir -p "$FOLDER_NAME"
             
-            # Read the file paths from the batch file and move them
+            # Read the file paths from the batch list
             while IFS= read -r filepath; do
-              # Recreate the directory structure inside the new batch folder
-              mkdir -p "$FOLDER_NAME/$(dirname "$filepath")"
-              mv "$filepath" "$FOLDER_NAME/$filepath"
+              # Move the file directly into the batch folder (flattening the structure)
+              # This prevents GitHub folder limit errors
+              mv "$filepath" "$FOLDER_NAME/"
             done < "$batch"
             
             # Clean up the text file
             rm "$batch"
             i=$((i+1))
           done
+          
+          # Clean up the empty temp folder
+          rm -rf temp_all_sprites
 
       - name: Commit and Push the split files
         run: |
