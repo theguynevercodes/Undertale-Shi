@@ -1,23 +1,59 @@
-name: Unzip Sprites
+name: Unzip and Split Sprites
 
 on: [push]
 
 jobs:
-  unzip:
+  unzip-and-split:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Unzip the sprites
+      - name: Unzip and Split
         run: |
-          sudo apt-get install unzip
-          unzip sprites.zip -d sprites/
+          # 1. Create a temporary folder to unzip everything into
+          mkdir -p temp_all_sprites
           
-      - name: Commit and Push the unzipped files
+          # 2. Unzip every .zip file in the root directory into the temp folder
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              echo "Unzipping $file..."
+              unzip -o -q "$file" -d temp_all_sprites/
+            fi
+          done
+
+          # 3. Split the files into batches of 500
+          mkdir -p split_sprites
+          cd temp_all_sprites
+          
+          # Find all files, shuffle them (optional, but helps if zips had alphabetical order), 
+          # and loop through them 500 at a time.
+          find . -type f | split -l 500 - batch_
+          
+          # 4. Move each batch into its own numbered folder
+          i=1
+          for batch in batch_*; do
+            FOLDER_NAME="../split_sprites/sprites_batch_$i"
+            mkdir -p "$FOLDER_NAME"
+            
+            # Read the file paths from the batch file and move them
+            while IFS= read -r filepath; do
+              # Recreate the directory structure inside the new batch folder
+              mkdir -p "$FOLDER_NAME/$(dirname "$filepath")"
+              mv "$filepath" "$FOLDER_NAME/$filepath"
+            done < "$batch"
+            
+            # Clean up the text file
+            rm "$batch"
+            i=$((i+1))
+          done
+
+      - name: Commit and Push the split files
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add sprites/
-          git commit -m "Automated unzip of sprite files"
+          git add split_sprites/
+          
+          # The || echo prevents the action from failing if there were no changes
+          git commit -m "Automated unzip and split into batches of 500" || echo "No changes to commit"
           git push
